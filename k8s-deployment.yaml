@@ -1,0 +1,113 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: rag-app-deployment
+  namespace: default
+  labels:
+    app: rag-api
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: rag-api
+  template:
+    metadata:
+      labels:
+        app: rag-api
+    spec:
+      containers:
+      - name: rag-api-container
+        image: zag23/rag-app:latest
+        imagePullPolicy: IfNotPresent
+        ports:
+        - name: http
+          containerPort: 8000
+          protocol: TCP
+        env:
+        # Ollama configuration
+        - name: OLLAMA_HOST
+          value: "host.docker.internal:11434"  # For Mac/Windows Docker Desktop
+          # For Linux, use: value: "<host-ip>:11434"
+        - name: OLLAMA_MODEL
+          value: "tinyllama"  # Change to your preferred model
+        
+        # ChromaDB configuration
+        - name: CHROMA_DB_PATH
+          value: "/app/db"  # Using persistent volume
+        - name: CHROMA_COLLECTION_NAME
+          value: "docs"
+        
+        # Health checks
+        livenessProbe:
+          httpGet:
+            path: /
+            port: 8000
+            scheme: HTTP
+          initialDelaySeconds: 30
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 3
+        
+        readinessProbe:
+          httpGet:
+            path: /
+            port: 8000
+            scheme: HTTP
+          initialDelaySeconds: 10
+          periodSeconds: 5
+          timeoutSeconds: 3
+          failureThreshold: 3
+        
+        # Resource limits
+        resources:
+          requests:
+            cpu: 250m
+            memory: 256Mi
+          limits:
+            cpu: 500m
+            memory: 512Mi
+        
+        # Volume mount for persistent ChromaDB storage
+        volumeMounts:
+        - name: chromadb-storage
+          mountPath: /app/db
+      
+      # Use host network for Docker Desktop compatibility
+      hostNetwork: true
+      
+      # Persistent volume for ChromaDB
+      volumes:
+      - name: chromadb-storage
+        persistentVolumeClaim:
+          claimName: chromadb-pvc
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: rag-api-service
+  namespace: default
+  labels:
+    app: rag-api
+spec:
+  type: NodePort
+  ports:
+  - port: 80
+    targetPort: 8000
+    protocol: TCP
+    name: http
+    nodePort: 30001
+  selector:
+    app: rag-api
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: chromadb-pvc
+  namespace: default
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 1Gi
+  storageClassName: standard

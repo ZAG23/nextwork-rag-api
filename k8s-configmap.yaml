@@ -1,0 +1,11 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: rag-api-config
+  namespace: default
+data:
+  # Default configuration values
+  OLLAMA_MODEL: "tinyllama"
+  CHROMA_DB_PATH: "/app/db"
+  CHROMA_COLLECTION_NAME: "docs"
+  # OLLAMA_HOST should be set per environment (Mac/Windows vs Linux)

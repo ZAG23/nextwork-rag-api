@@ -140,16 +140,67 @@ Query the knowledge base and get an AI-generated answer.
 **Request Body:**
 ```json
 {
-  "q": "What is Kubernetes?"
+  "q": "What is Kubernetes?",
+  "n_results": 1,
+  "include_scores": false,
+  "use_best_only": true
 }
 ```
+
+**Parameters:**
+- `q` (required): The question to search for
+- `n_results` (optional, default: 1): Number of results to retrieve (1-10)
+- `include_scores` (optional, default: false): Include relevance scores in response
+- `use_best_only` (optional, default: true): If true, only use best result for AI answer; if false, combine all results
+
+**Response (basic):**
+```json
+{
+  "answer": "Kubernetes is a container orchestration platform...",
+  "results_count": 1
+}
+```
+
+**Response (with scores and multiple results):**
+```json
+{
+  "answer": "Kubernetes is a container orchestration platform...",
+  "results_count": 3,
+  "results": [
+    {
+      "id": "doc-id-1",
+      "text": "Kubernetes is a container orchestration...",
+      "relevance_score": 0.9234,
+      "distance": 0.0832
+    },
+    {
+      "id": "doc-id-2",
+      "text": "Kubernetes helps manage containers...",
+      "relevance_score": 0.8567,
+      "distance": 0.1673
+    }
+  ]
+}
+```
+
+### `DELETE /delete/{doc_id}`
+Delete a document from the knowledge base by its ID.
+
+**Path Parameters:**
+- `doc_id`: The unique ID of the document to delete (returned when adding a document)
 
 **Response:**
 ```json
 {
-  "answer": "Kubernetes is a container orchestration platform..."
+  "status": "success",
+  "message": "Document 'uuid-here' deleted successfully",
+  "id": "uuid-here"
 }
 ```
+
+**Error Responses:**
+- `404`: Document not found
+- `400`: Invalid document ID
 
 ## Usage Examples
 
@@ -162,11 +213,28 @@ curl -X POST "http://localhost:8000/add" \
   -d '{"text": "FastAPI is a modern web framework for building APIs with Python."}'
 ```
 
-**Query:**
+**Query (basic):**
 ```bash
 curl -X POST "http://localhost:8000/query" \
   -H "Content-Type: application/json" \
   -d '{"q": "What is FastAPI?"}'
+```
+
+**Query (with multiple results and scores):**
+```bash
+curl -X POST "http://localhost:8000/query" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "q": "What is FastAPI?",
+    "n_results": 3,
+    "include_scores": true,
+    "use_best_only": false
+  }'
+```
+
+**Delete document:**
+```bash
+curl -X DELETE "http://localhost:8000/delete/your-document-id-here"
 ```
 
 ### Using Python
@@ -181,12 +249,33 @@ response = requests.post(
 )
 print(response.json())
 
-# Query
+# Query (basic)
 response = requests.post(
     "http://localhost:8000/query",
     json={"q": "Your question here"}
 )
 print(response.json()["answer"])
+
+# Query (with multiple results and scores)
+response = requests.post(
+    "http://localhost:8000/query",
+    json={
+        "q": "Your question here",
+        "n_results": 3,
+        "include_scores": True,
+        "use_best_only": False
+    }
+)
+data = response.json()
+print(f"Answer: {data['answer']}")
+print(f"Found {data['results_count']} results")
+for i, result in enumerate(data.get('results', []), 1):
+    print(f"  Result {i} (score: {result.get('relevance_score', 'N/A')}): {result['text'][:100]}...")
+
+# Delete document
+doc_id = "your-document-id-here"
+response = requests.delete(f"http://localhost:8000/delete/{doc_id}")
+print(response.json())
 ```
 
 ## Project Structure
@@ -206,18 +295,38 @@ nextwork-rag-api/
 
 ## Configuration
 
-- **Database Path**: The ChromaDB database is stored in `./db` (can be changed in `app.py` line 15)
-- **Ollama Model**: Default is `tinyllama` (can be changed in `app.py` line 95)
-- **Collection Name**: Default is `"docs"` (can be changed in `app.py` line 16)
-- **Ollama Host**: 
-  - Local development: Defaults to `localhost:11434`
-  - Docker: Set via `OLLAMA_HOST` environment variable (defaults to `host.docker.internal:11434`)
-  - The code automatically strips `http://` or `https://` prefixes if present
+All configuration is done via environment variables. No code changes needed!
 
 ### Environment Variables
 
 - `OLLAMA_HOST`: Ollama server address in `hostname:port` format (e.g., `localhost:11434` or `host.docker.internal:11434`)
+  - Default: `localhost:11434`
   - **Note**: The Ollama Python client expects `hostname:port` format, not a full URL. Protocol prefixes are automatically removed.
+
+- `OLLAMA_MODEL`: The Ollama model to use for generating answers
+  - Default: `tinyllama`
+  - Example: `export OLLAMA_MODEL=llama2` (after running `ollama pull llama2`)
+
+- `CHROMA_DB_PATH`: Path where ChromaDB stores its database files
+  - Default: `./db`
+  - Example: `export CHROMA_DB_PATH=/data/rag-db`
+
+- `CHROMA_COLLECTION_NAME`: Name of the ChromaDB collection to use
+  - Default: `docs`
+  - Example: `export CHROMA_COLLECTION_NAME=knowledge_base`
+
+### Example Configuration
+
+```bash
+# Set all environment variables
+export OLLAMA_HOST=localhost:11434
+export OLLAMA_MODEL=llama2
+export CHROMA_DB_PATH=./db
+export CHROMA_COLLECTION_NAME=docs
+
+# Then start the server
+uvicorn app:app --reload
+```
 
 ## Troubleshooting
 
@@ -246,11 +355,18 @@ nextwork-rag-api/
 
 ### Latest Changes
 
+- **Query improvements**: 
+  - Support for multiple results (configurable `n_results`, max 10)
+  - Relevance scores and distance metrics
+  - Option to combine all results or use only the best match
+  - Enhanced response format with detailed result metadata
+- **Environment variable configuration**: All settings (model, DB path, collection name) now configurable via environment variables - no code changes needed!
+- **Improved error messages**: More actionable error messages that help users diagnose issues (connection problems, missing models, empty knowledge base, etc.)
+- **DELETE endpoint**: Added `/delete/{doc_id}` endpoint to remove documents from the knowledge base
 - **Fixed Ollama client response handling**: Changed from dictionary access (`answer["response"]`) to attribute access (`answer.response`) to match the Ollama Python client API
 - **Improved Ollama host configuration**: Added automatic protocol stripping for `OLLAMA_HOST` environment variable to handle both URL and hostname:port formats
 - **Docker support**: Added Dockerfile and published image to Docker Hub (`zag23/rag-app:latest`)
 - **Connection testing**: Added `test_connection.py` script to verify Ollama and ChromaDB connections
-- **Error handling**: Improved error messages and exception handling
 
 ### Docker Hub
 

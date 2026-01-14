@@ -1,0 +1,3 @@
+# Test dependencies
+# Install with: pip install -r requirements-test.txt
+requests>=2.31.0

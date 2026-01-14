@@ -1,0 +1,91 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: rag-app-deployment
+  namespace: default
+  labels:
+    app: rag-api
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: rag-api
+  template:
+    metadata:
+      labels:
+        app: rag-api
+    spec:
+      containers:
+      - name: rag-api-container
+        image: zag23/rag-app:latest
+        imagePullPolicy: IfNotPresent
+        ports:
+        - name: http
+          containerPort: 8000
+          protocol: TCP
+        env:
+        # Ollama configuration
+        - name: OLLAMA_HOST
+          value: "host.docker.internal:11434"  # For Mac/Windows Docker Desktop
+          # For Linux, use: value: "<host-ip>:11434"
+        
+        # Load from ConfigMap
+        - name: OLLAMA_MODEL
+          valueFrom:
+            configMapKeyRef:
+              name: rag-api-config
+              key: OLLAMA_MODEL
+        - name: CHROMA_DB_PATH
+          valueFrom:
+            configMapKeyRef:
+              name: rag-api-config
+              key: CHROMA_DB_PATH
+        - name: CHROMA_COLLECTION_NAME
+          valueFrom:
+            configMapKeyRef:
+              name: rag-api-config
+              key: CHROMA_COLLECTION_NAME
+        
+        # Health checks
+        livenessProbe:
+          httpGet:
+            path: /
+            port: 8000
+            scheme: HTTP
+          initialDelaySeconds: 30
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 3
+        
+        readinessProbe:
+          httpGet:
+            path: /
+            port: 8000
+            scheme: HTTP
+          initialDelaySeconds: 10
+          periodSeconds: 5
+          timeoutSeconds: 3
+          failureThreshold: 3
+        
+        # Resource limits
+        resources:
+          requests:
+            cpu: 250m
+            memory: 256Mi
+          limits:
+            cpu: 500m
+            memory: 512Mi
+        
+        # Volume mount for persistent ChromaDB storage
+        volumeMounts:
+        - name: chromadb-storage
+          mountPath: /app/db
+      
+      # Use host network for Docker Desktop compatibility
+      hostNetwork: true
+      
+      # Persistent volume for ChromaDB
+      volumes:
+      - name: chromadb-storage
+        persistentVolumeClaim:
+          claimName: chromadb-pvc
