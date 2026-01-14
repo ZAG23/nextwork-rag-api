@@ -261,4 +261,4 @@ The working image is available on Docker Hub:
 
 ## License
 
-MIT
+APACHE 2.0
