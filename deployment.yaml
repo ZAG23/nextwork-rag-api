@@ -1,0 +1,70 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: rag-app-deployment
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: rag-api
+  template:
+    metadata:
+      labels:
+        app: rag-api
+    spec:
+      hostNetwork: true  # Allow pod to access host network (for local Ollama)
+      containers:
+      - name: rag-api-container
+        image: zag23/rag-app:latest
+        # Use 'Never' only if using local image: rag-app:latest
+        # imagePullPolicy: Never
+        imagePullPolicy: IfNotPresent
+        ports:
+        - containerPort: 8000  # Port the Python application listens on (matches Dockerfile)
+          name: http
+        env:
+        - name: OLLAMA_HOST
+          # Choose one of these options based on your setup:
+          # 
+          # Option 1: Ollama running in Kubernetes cluster (recommended for production)
+          # value: "ollama-service.default.svc.cluster.local:11434"
+          # Note: Remove hostNetwork: true for production deployments
+          #
+          # Option 2: Ollama on host machine (for minikube/local dev) - CURRENTLY ACTIVE
+          # Requires hostNetwork: true (enabled above) to access host machine
+          # For minikube, use host.docker.internal which works with hostNetwork
+          value: "host.docker.internal:11434"
+          #
+          # Option 3: Ollama on external host
+          # value: "your-host-ip-or-domain:11434"
+          # May require network configuration to allow pod-to-host communication
+        resources:
+          requests:
+            memory: "256Mi"
+            cpu: "250m"
+          limits:
+            memory: "512Mi"
+            cpu: "500m"
+        livenessProbe:
+          httpGet:
+            path: /
+            port: 8000  # Health check port (matches containerPort)
+          initialDelaySeconds: 30
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 3
+        readinessProbe:
+          httpGet:
+            path: /
+            port: 8000  # Readiness check port (matches containerPort)
+          initialDelaySeconds: 10
+          periodSeconds: 5
+          timeoutSeconds: 3
+          failureThreshold: 3
+        volumeMounts:
+        - name: chromadb-storage
+          mountPath: /app/db
+      volumes:
+      - name: chromadb-storage
+        persistentVolumeClaim:
+          claimName: chromadb-pvc

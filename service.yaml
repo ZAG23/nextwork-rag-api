@@ -1,0 +1,14 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: rag-api-service
+spec:
+  type: NodePort  # NodePort makes the service accessible from outside the cluster via a static port
+  selector:
+    app: rag-api  # Matches the label in deployment.yaml
+  ports:
+  - port: 80  # Internal cluster port that other services use to access this service
+    targetPort: 8000  # Port the Python application is listening on inside the container
+    nodePort: 30001  # Static external port accessible from outside the cluster (Minikube)
+    protocol: TCP
+    name: http

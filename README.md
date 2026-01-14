@@ -236,6 +236,7 @@ curl -X POST "http://localhost:8000/query" \
 ```bash
 curl -X DELETE "http://localhost:8000/delete/your-document-id-here"
 ```
+> **Note:** The API expects JSON format. Do not use `-G` (GET) flag with `--data-urlencode` as this will cause errors. Always use `-H "Content-Type: application/json"` with `-d` for JSON payloads.
 
 ### Using Python
 
@@ -296,6 +297,14 @@ nextwork-rag-api/
 ## Configuration
 
 All configuration is done via environment variables. No code changes needed!
+- **Database Path**: The ChromaDB database is stored in `./db` (can be changed in `app.py` line 15)
+- **Ollama Model**: Default is `tinyllama` (can be changed in `app.py` line 95)
+- **Collection Name**: Default is `"docs"` (can be changed in `app.py` line 16)
+- **Ollama Host**: 
+  - Local development: Defaults to `localhost:11434`
+  - Docker: Set via `OLLAMA_HOST` environment variable (defaults to `host.docker.internal:11434`)
+  - Kubernetes/Minikube: Use `host.docker.internal:11434` with `hostNetwork: true` for accessing host machine's Ollama
+  - The code automatically strips `http://` or `https://` prefixes if present
 
 ### Environment Variables
 
@@ -343,10 +352,16 @@ uvicorn app:app --reload
 
 5. **Docker container can't connect to Ollama**:
    - Verify Ollama is running on the host: `curl http://localhost:11434/api/tags`
+   - On Mac/Windows: Use `host.docker.internal:11434` (default)
    - On Linux, you may need to use `--network host` or set `OLLAMA_HOST` to your host's IP
    - Check container logs: `docker logs rag-app`
 
-6. **Test connections**: Use the provided test script:
+6. **Kubernetes/Minikube can't connect to Ollama**:
+   - For minikube: Use `host.docker.internal:11434` as `OLLAMA_HOST` and enable `hostNetwork: true` in deployment
+   - Verify Ollama is accessible: `minikube ssh "curl http://host.docker.internal:11434/api/tags"`
+   - Check pod logs: `kubectl logs -l app=rag-api`
+
+7. **Test connections**: Use the provided test script:
    ```bash
    python test_connection.py
    ```
@@ -363,6 +378,9 @@ uvicorn app:app --reload
 - **Environment variable configuration**: All settings (model, DB path, collection name) now configurable via environment variables - no code changes needed!
 - **Improved error messages**: More actionable error messages that help users diagnose issues (connection problems, missing models, empty knowledge base, etc.)
 - **DELETE endpoint**: Added `/delete/{doc_id}` endpoint to remove documents from the knowledge base
+- **Fixed API request format**: Updated curl examples to use proper JSON format with `Content-Type: application/json` header (removed incorrect `-G` flag usage)
+- **Fixed port configuration**: Corrected deployment and service to use port 8000 (matching Dockerfile) instead of 5000
+- **Fixed Kubernetes/Minikube Ollama connection**: Updated to use `host.docker.internal:11434` with `hostNetwork: true` for accessing host machine's Ollama service
 - **Fixed Ollama client response handling**: Changed from dictionary access (`answer["response"]`) to attribute access (`answer.response`) to match the Ollama Python client API
 - **Improved Ollama host configuration**: Added automatic protocol stripping for `OLLAMA_HOST` environment variable to handle both URL and hostname:port formats
 - **Docker support**: Added Dockerfile and published image to Docker Hub (`zag23/rag-app:latest`)
