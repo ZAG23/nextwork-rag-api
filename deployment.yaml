@@ -1,0 +1,71 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: rag-app-deployment
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: rag-api
+  template:
+    metadata:
+      labels:
+        app: rag-api
+    spec:
+      containers:
+      - name: rag-api-container
+        image: zag23/rag-app:latest
+        # Use 'Never' only if using local image: rag-app:latest
+        # imagePullPolicy: Never
+        imagePullPolicy: IfNotPresent
+        ports:
+        - containerPort: 8000
+          name: http
+        env:
+        - name: OLLAMA_HOST
+          # IMPORTANT: host.docker.internal doesn't work in Kubernetes!
+          # Choose one of these options based on your setup:
+          # 
+          # Option 1: Ollama running in Kubernetes cluster (recommended for production)
+          # value: "ollama-service.default.svc.cluster.local:11434"
+          #
+          # Option 2: Ollama on host machine (for local dev with kind/minikube)
+          # You'll need to add hostNetwork: true to spec.template.spec above
+          # and use: value: "localhost:11434"
+          #
+          # Option 3: Ollama on external host
+          # value: "your-host-ip-or-domain:11434"
+          #
+          # Option 4: For Docker Desktop Kubernetes, you can try:
+          # value: "host.docker.internal:11434" (may not work, depends on setup)
+          value: "ollama-service.default.svc.cluster.local:11434"
+        resources:
+          requests:
+            memory: "256Mi"
+            cpu: "250m"
+          limits:
+            memory: "512Mi"
+            cpu: "500m"
+        livenessProbe:
+          httpGet:
+            path: /
+            port: 8000
+          initialDelaySeconds: 30
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 3
+        readinessProbe:
+          httpGet:
+            path: /
+            port: 8000
+          initialDelaySeconds: 10
+          periodSeconds: 5
+          timeoutSeconds: 3
+          failureThreshold: 3
+        volumeMounts:
+        - name: chromadb-storage
+          mountPath: /app/db
+      volumes:
+      - name: chromadb-storage
+        persistentVolumeClaim:
+          claimName: chromadb-pvc
